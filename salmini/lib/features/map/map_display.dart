@@ -1,3 +1,5 @@
+// map_display.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -22,6 +24,7 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
   bool _isLoading = false;
   final TextEditingController _destinationController = TextEditingController();
   Set<Polyline> _polylines = {};
+  Polyline? _originalRoutePolyline;
   final Polypoints _polypoints = Polypoints();
   LatLng? _lastPosition;
   double _currentSpeedKph = 0.0;
@@ -63,7 +66,7 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error getting location: ${e.toString()}")),
+        SnackBar(content: Text("Error getting location: \${e.toString()}")),
       );
     } finally {
       setState(() => _isLoading = false);
@@ -73,12 +76,12 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
   void _trackUserMovement() {
     UserLocationHandler.listenToLocationChanges().listen((Position position) {
       LatLng newLatLng = LatLng(position.latitude, position.longitude);
-
       double speedInMps = position.speed;
       double speedInKph = speedInMps * 3.6;
 
       if (_lastPosition != null) {
         _animateMarker(_lastPosition!, newLatLng);
+        _updateColoredPolyline(_lastPosition!, newLatLng, speedInKph);
       }
 
       setState(() {
@@ -115,6 +118,31 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
     }
   }
 
+  void _updateColoredPolyline(LatLng from, LatLng to, double speedKph) {
+    Color color;
+    if (speedKph < 60) {
+      color = Colors.green;
+    } else if (speedKph >= 60 && speedKph <= 80) {
+      color = Colors.orange;
+    } else {
+      color = Colors.red;
+    }
+
+    final String segmentId = "segment_\${DateTime.now().millisecondsSinceEpoch}";
+    final Polyline coloredSegment = Polyline(
+      polylineId: PolylineId(segmentId),
+      points: [from, to],
+      color: color,
+      width: 5,
+      geodesic: true,
+      zIndex: 2,
+    );
+
+    setState(() {
+      _polylines.add(coloredSegment);
+    });
+  }
+
   Future<void> _setDestination() async {
     final address = _destinationController.text.trim();
     if (address.isEmpty) {
@@ -128,104 +156,69 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
 
     try {
       final locations = await locationFromAddress(address);
-      if (locations.isEmpty) {
-        throw Exception("No location found for this address");
-      }
+      if (locations.isEmpty) throw Exception("No location found for this address");
+      if (_currentPosition == null) throw Exception("Current position not available");
 
-      if (_currentPosition == null) {
-        throw Exception("Current position not available");
-      }
-
-      final destinationLatLng = LatLng(
-        locations.first.latitude,
-        locations.first.longitude,
-      );
-      final originLatLng = LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
+      final destinationLatLng = LatLng(locations.first.latitude, locations.first.longitude);
+      final originLatLng = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
 
       setState(() {
         _destinationMarker = Marker(
           markerId: const MarkerId("destination"),
           position: destinationLatLng,
-          infoWindow: InfoWindow(title: "Destination: $address"),
+          infoWindow: InfoWindow(title: "Destination: \$address"),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         );
       });
 
-      final polylineCoordinates = await _polypoints.createPolylines(
-        originLatLng,
-        destinationLatLng,
+      final polylineCoordinates = await _polypoints.createPolylines(originLatLng, destinationLatLng);
+      if (polylineCoordinates.isEmpty) throw Exception("Failed to generate route between locations");
+
+      final Polyline originalPolyline = Polyline(
+        polylineId: const PolylineId("original_route"),
+        points: polylineCoordinates,
+        color: const Color.fromARGB(255, 61, 56, 56),
+        width: 4,
+        geodesic: true,
+        zIndex: 1,
       );
 
-      if (polylineCoordinates.isEmpty) {
-        throw Exception("Failed to generate route between locations");
-      }
-
       setState(() {
-        _polylines = {
-          Polyline(
-            polylineId: const PolylineId("route"),
-            points: polylineCoordinates,
-            color: Colors.blue,
-            width: 3,
-            geodesic: true,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-          ),
-        };
+        _originalRoutePolyline = originalPolyline;
+        _polylines = {originalPolyline};
       });
 
       await _fitToBounds(originLatLng, destinationLatLng, polylineCoordinates);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
+        SnackBar(content: Text("Error: \${e.toString()}")),
       );
-      print("Destination setting error: $e");
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _fitToBounds(
-    LatLng origin,
-    LatLng destination,
-    List<LatLng> polyline,
-  ) async {
+  Future<void> _fitToBounds(LatLng origin, LatLng destination, List<LatLng> polyline) async {
     try {
       final bounds = _boundsFromLatLngList([origin, destination] + polyline);
-
       final cameraUpdate = CameraUpdate.newLatLngBounds(bounds, 100);
-
-      if (_mapController != null) {
-        await _mapController!.animateCamera(cameraUpdate);
-      }
+      if (_mapController != null) await _mapController!.animateCamera(cameraUpdate);
     } catch (e) {
-      print("Error adjusting camera: $e");
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(origin, 12),
-      );
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(origin, 12));
     }
   }
 
   LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
-    assert(list.isNotEmpty, "List of LatLng cannot be empty");
-
+    assert(list.isNotEmpty);
     double x0 = list[0].latitude, x1 = list[0].latitude;
     double y0 = list[0].longitude, y1 = list[0].longitude;
-
     for (final latLng in list.skip(1)) {
       if (latLng.latitude > x1) x1 = latLng.latitude;
       if (latLng.latitude < x0) x0 = latLng.latitude;
       if (latLng.longitude > y1) y1 = latLng.longitude;
       if (latLng.longitude < y0) y0 = latLng.longitude;
     }
-
-    return LatLngBounds(
-      northeast: LatLng(x1, y1),
-      southwest: LatLng(x0, y0),
-    );
+    return LatLngBounds(northeast: LatLng(x1, y1), southwest: LatLng(x0, y0));
   }
 
   @override
@@ -251,7 +244,6 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
             onMapCreated: (controller) => _mapController = controller,
             zoomControlsEnabled: false,
           ),
-
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 20,
@@ -261,9 +253,7 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(color: Colors.black26, blurRadius: 5),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)],
               ),
               child: Row(
                 children: [
@@ -278,11 +268,7 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
                   ),
                   IconButton(
                     icon: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.search),
                     onPressed: _isLoading ? null : _setDestination,
                   ),
@@ -290,7 +276,6 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
               ),
             ),
           ),
-
           Positioned(
             bottom: 40,
             left: 16,
@@ -302,7 +287,6 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
               backgroundColor: Colors.blue,
             ),
           ),
-
           Positioned(
             bottom: 40,
             right: 16,
@@ -320,7 +304,6 @@ class _MapDisplayScreen extends State<MapDisplayScreen> {
               backgroundColor: Colors.black,
             ),
           ),
-
           Positioned(
             bottom: 40,
             left: 0,
