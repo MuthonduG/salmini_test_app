@@ -3,6 +3,5 @@ services:
     name: salmini-backend
     env: docker
     plan: free
-    buildCommand: ""
     dockerfilePath: salmini_bakend/Dockerfile
     rootDir: salmini_bakend
