@@ -3,5 +3,11 @@ services:
     name: salmini-backend
     env: docker
     plan: free
-    dockerfilePath: salmini_bakend/Dockerfile
-    rootDir: salmini_bakend
+    dockerfilePath: ./salmini_bakend/Dockerfile  # Ensure relative path is accurate
+    rootDir: ./salmini_bakend  # Root directory of your backend service
+    startCommand: python manage.py runserver  # Example: Update based on your start command
+    envVars:  # Add environment variables if needed
+      - key: DEBUG
+        value: "True"  # Change to "False" for production
+      - key: SECRET_KEY
+        value: "your-secret-key"  # Replace with your actual secret key
