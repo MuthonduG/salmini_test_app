@@ -22,7 +22,7 @@ services:
 
   db:
     container_name: salmini_db
-    image: postgres:17
+    image: postgis/postgis:15-3.3
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres

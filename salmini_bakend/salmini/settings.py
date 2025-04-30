@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,7 +24,6 @@ INSTALLED_APPS = [
 
     # installed apps
     'channels',
-    '',
 ]
 
 MIDDLEWARE = [
@@ -58,10 +58,23 @@ WSGI_APPLICATION = 'salmini.wsgi.application'
 
 
 # Database
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
+import os
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': os.getenv('PG_DB', 'postgres'),
+        'USER': os.getenv('PG_USER', 'postgres'),
+        'PASSWORD': os.getenv('PG_PASSWORD', 'postgres'),
+        'HOST': os.getenv('PG_HOST', 'localhost'),
+        'PORT': os.getenv('PG_PORT', '5432'),
     }
 }
 

@@ -1,20 +1,32 @@
-FROM python:3.13y-slim
-
-ENV PYTHONBUFFERED 1
-ENV PYTHONDONTWRITEBYTECODE 1
+FROM python:3.11-slim
 
 WORKDIR /app
 
+# System dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gdal-bin \
+    libgdal-dev \
+    python3-dev \
+    python3-pip \
+    curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set GDAL include paths
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+
+# Install numpy first
+RUN pip install --upgrade pip && pip install numpy
+
+# Get GDAL version dynamically and install
+RUN GDAL_VERSION=$(gdal-config --version) && \
+    pip install gdal=="$GDAL_VERSION"
+
 COPY requirements.txt .
-COPY .env .
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY django.sh /app/django.sh
-RUN chmod +x /app/django.sh
+RUN pip install -r requirements.txt
 
 COPY . .
-
-EXPOSE 8000
 
 ENTRYPOINT [ "/app/django.sh" ]
