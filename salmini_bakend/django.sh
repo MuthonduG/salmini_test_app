@@ -1,6 +1,11 @@
 #!/bin/bash
-
 set -e
+
+echo "Waiting for DB to be ready..."
+until nc -z $DB_HOST $DB_PORT; do
+  echo "Waiting for database at $DB_HOST:$DB_PORT..."
+  sleep 2
+done
 
 echo "Running migrations"
 python manage.py makemigrations

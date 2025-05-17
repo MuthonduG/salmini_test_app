@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: django
+  template:
+    metadata:
+      labels:
+        app: django
+    spec:
+      containers:
+        - name: django
+          image: geniusdevmmg/salmini:latest   
+          imagePullPolicy: Always            
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: django-config
+            - secretRef:
+                name: django-secrets
+          volumeMounts:
+            - name: django-volume
+              mountPath: /app
+      volumes:
+        - name: django-volume
+          emptyDir: {}
