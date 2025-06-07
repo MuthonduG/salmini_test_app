@@ -162,7 +162,7 @@ class RegisterScreen extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // Google button
+                  
                   OutlinedButton(
                     onPressed: () {
                       // Handle Google sign in
